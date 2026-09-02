@@ -13,6 +13,9 @@ echo ">> Deploying varco-gates on $HOST (pull from GHCR)"
 
 ssh "$HOST" 'set -euo pipefail
 cd ~/varco-gates
+if [ ! -f docker-compose.yml ]; then
+  git clone https://github.com/paraflu/varco-gates.git .
+fi
 docker compose pull
 docker compose up -d --remove-orphans'
 

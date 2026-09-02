@@ -67,6 +67,14 @@ jobs:
           HA_BASE_URL=$HA_BASE_URL
           EOF
 
+          # Assicura che la directory esista su Oracle
+          ssh -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=20 \
+              -i "$KEY_FILE" \
+              paraflu@jlide.duckdns.org \
+              'mkdir -p ~/varco-gates'
+
           scp -o StrictHostKeyChecking=accept-new \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=20 \
@@ -82,6 +90,10 @@ jobs:
               'bash -s' <<'REMOTE'
           set -euo pipefail
           cd ~/varco-gates
+          # Primo deploy: clona il repo se non esiste
+          if [ ! -f docker-compose.yml ]; then
+            git clone https://github.com/paraflu/varco-gates.git .
+          fi
           docker compose pull
           docker compose up -d --remove-orphans
           sleep 5
