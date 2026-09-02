@@ -73,14 +73,14 @@ jobs:
               -o ConnectTimeout=20 \
               -i "$KEY_FILE" \
               paraflu@jlide.duckdns.org \
-              'mkdir -p ~/varco-gates'
+              'mkdir -p ~/projects/varco-gates'
 
           scp -o StrictHostKeyChecking=accept-new \
               -o UserKnownHostsFile=/dev/null \
               -o ConnectTimeout=20 \
               -i "$KEY_FILE" \
               "$ENV_FILE" \
-              paraflu@jlide.duckdns.org:~/varco-gates/.env
+              paraflu@jlide.duckdns.org:~/projects/varco-gates/.env
 
           ssh -o StrictHostKeyChecking=accept-new \
               -o UserKnownHostsFile=/dev/null \
@@ -89,7 +89,7 @@ jobs:
               paraflu@jlide.duckdns.org \
               'bash -s' <<'REMOTE'
           set -euo pipefail
-          cd ~/varco-gates
+          cd ~/projects/varco-gates
           # Primo deploy: clona il repo se non esiste
           if [ ! -f docker-compose.yml ]; then
             git clone https://github.com/paraflu/varco-gates.git .

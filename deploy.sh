@@ -4,6 +4,7 @@
 set -euo pipefail
 
 HOST="paraflu@jlide.duckdns.org"
+REMOTE_DIR="~/projects/varco-gates"
 
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:?"ADMIN_PASSWORD env required"}"
 export HA_TOKEN="${HA_TOKEN:?"HA_TOKEN env required"}"
@@ -11,13 +12,7 @@ export HA_BASE_URL="${HA_BASE_URL:-http://192.168.3.27:8123}"
 
 echo ">> Deploying varco-gates on $HOST (pull from GHCR)"
 
-ssh "$HOST" 'set -euo pipefail
-cd ~/varco-gates
-if [ ! -f docker-compose.yml ]; then
-  git clone https://github.com/paraflu/varco-gates.git .
-fi
-docker compose pull
-docker compose up -d --remove-orphans'
+ssh "$HOST" "set -euo pipefail\ncd $REMOTE_DIR\nif [ ! -f docker-compose.yml ]; then\n  git clone https://github.com/paraflu/varco-gates.git .\nfi\ndocker compose pull\ndocker compose up -d --remove-orphans"
 
 echo ">> Smoke test"
 sleep 5
