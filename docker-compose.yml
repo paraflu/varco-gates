@@ -1,6 +1,7 @@
 services:
   varco-gates:
-    image: ghcr.io/paraflu/varco-gates:${TAG:-latest}
+    build: .
+    image: varco-gates:latest
     container_name: varco-gates
     restart: unless-stopped
     ports:
@@ -23,3 +24,4 @@ services:
 
 volumes:
   varco_data:
+

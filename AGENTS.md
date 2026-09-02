@@ -20,8 +20,8 @@ Browser ── HTTPS ── NPM (Oracle) ── 127.0.0.1:3099 ── Docker (no
 - `src/views/GateControl.vue` — public token UI (Apri/Chiudi)
 - `src/views/AdminPanel.vue` — password-protected admin UI
 - `docker-compose.yml` — prod compose (env via .env, volume varco_data)
-- `deploy.sh` — manual build/push/deploy helper
-- `.github/workflows/deploy.yml` — CI: push main → GHCR + Appleboy SSH deploy
+- `deploy.sh` — manual git pull + build + deploy helper
+- `.github/workflows/deploy.yml` — CI: push main → SSH su Oracle → git pull + docker compose build (locale/ARM)
 
 ## Entities HA (verified 2026-09-02)
 - `switch.sonoff_1002658c25_1` = Cancello Andrea (`turn_on` apri, `turn_off` chiudi)
@@ -45,13 +45,13 @@ Browser ── HTTPS ── NPM (Oracle) ── 127.0.0.1:3099 ── Docker (no
 | `HA_TOKEN` | export → container |
 | `HA_BASE_URL` | export → container |
 
-Il workflow copia `docker-compose.yml` in `~/varco-gates/` sul server via scp, poi `docker compose pull && up -d` con le env esportate dalla shell (niente .env file sul server). L'immagine GHCR va resa **public** dopo il primo push, altrimenti `docker pull` sul server fallisce.
+Il workflow fa `git clone/pull` del repo pubblico in `~/varco-gates/` sul server, poi `docker compose up -d --build` (build nativo ARM64, env esportate dalle GitHub secrets — niente .env file sul server). Nessuna dipendenza da GHCR.
 
 ## Operations
 - **Regenerate tokens** → admin UI `/admin`
 - **Add/remove gates** → `server/ha.js` (mapping) + frontend auto-lists from `/api/verify`
-- **Deploy** → push main (CI), or `./deploy.sh <tag>` manually
-- **Logs** → `docker compose -f ~/projects/varco-gates/docker-compose.yml logs -f varco-gates`
+- **Deploy** → push main (CI), or `./deploy.sh` manually
+- **Logs** → `docker compose -f ~/varco-gates/docker-compose.yml logs -f varco-gates`
 - **Backup** → `docker run --rm -v varco-gates_varco_data:/data -v $PWD:/backup alpine tar czf /backup/varco-data-$(date +%F).tar.gz -C /data .`
 
 ## Constraints
