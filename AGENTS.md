@@ -37,6 +37,16 @@ Browser ── HTTPS ── NPM (Oracle) ── 127.0.0.1:3099 ── Docker (no
 | `GATE_ALESSANDRO_ENTITY` | no | override entity |
 | `PORT` | no | default 3000 |
 
+## GitHub Actions secrets (repo → Settings → Secrets)
+| Secret | Usato per |
+|--------|-----------|
+| `ORACLE_SSH_KEY` | ssh/scp verso `paraflu@jlide.duckdns.org` |
+| `ADMIN_PASSWORD` | export → container |
+| `HA_TOKEN` | export → container |
+| `HA_BASE_URL` | export → container |
+
+Il workflow copia `docker-compose.yml` in `~/varco-gates/` sul server via scp, poi `docker compose pull && up -d` con le env esportate dalla shell (niente .env file sul server). L'immagine GHCR va resa **public** dopo il primo push, altrimenti `docker pull` sul server fallisce.
+
 ## Operations
 - **Regenerate tokens** → admin UI `/admin`
 - **Add/remove gates** → `server/ha.js` (mapping) + frontend auto-lists from `/api/verify`

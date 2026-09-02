@@ -47,8 +47,13 @@ NPM on the server proxies `gates.paraflu.duckdns.org` → `http://127.0.0.1:3099
 
 ## CI/CD
 
-Push to `main` → GitHub Actions builds ra GHCR e SSH-deploys on Oracle (`jlide.duckdns.org`). Secrets needed in repo:
-- `ORACLE_SSH_KEY` — private key di accesso a paraflu@jlide.duckdns.org
+Push to `main` → GitHub Actions builds ra GHCR e SSH-deploys on Oracle (`jlide.duckdns.org`). Secrets da impostare in repo settings → Secrets and variables → Actions:
+- `ORACLE_SSH_KEY` — private key SSH di accesso a `paraflu@jlide.duckdns.org`
+- `ADMIN_PASSWORD` — password admin UI
+- `HA_TOKEN` — long-lived token Home Assistant
+- `HA_BASE_URL` — es. `http://192.168.3.27:8123`
+
+> Nota: l'immagine GHCR e private — dopo il primo push, impostare la visibility del package `ghcr.io/paraflu/varco-gates` a **public** (oppure `docker login` su Oracle con un PAT con `read:packages`.), così il server può fare `docker compose pull` senza credenziali.
 
 ## Notes
 - HA is on Tailscale only → the Oracle server must reach `192.168.3.27:8123` (either via Tailscale subnet route or via a tunnel from the homelab).

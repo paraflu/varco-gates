@@ -24,7 +24,7 @@ jobs:
           username: paraflu
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -34,14 +34,26 @@ jobs:
             ghcr.io/paraflu/varco-gates:latest
             ghcr.io/paraflu/varco-gates:${{ github.sha }}
 
-      - name: Deploy to Oracle
+      - name: Copy compose file to Oracle
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: jlide.duckdns.org
+          username: paraflu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          source: docker-compose.yml
+          target: varco-gates
+
+      - name: Deploy on Oracle
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: jlide.duckdns.org
           username: paraflu
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
-            cd ~/projects/varco-gates
+            cd ~/varco-gates
+            export ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}"
+            export HA_TOKEN="${{ secrets.HA_TOKEN }}"
+            export HA_BASE_URL="${{ secrets.HA_BASE_URL }}"
             docker compose pull
             docker compose up -d
             sleep 5
