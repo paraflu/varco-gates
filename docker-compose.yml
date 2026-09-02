@@ -15,7 +15,7 @@ services:
     volumes:
       - varco_data:/app/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
       interval: 30s
       timeout: 5s
       retries: 3

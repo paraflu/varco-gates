@@ -47,7 +47,7 @@ NPM on the server proxies `gates.paraflu.duckdns.org` → `http://127.0.0.1:3099
 
 ## CI/CD
 
-Push to `main` → GitHub Actions SSH-deploys on Oracle `jlide.duckdns.org`: fa `git pull` del repo pubblico, build dell'immagine **nativamente su ARM64** e `docker compose up -d --build`. Nessuna dipendenza da GHCR. Secrets da impostare in repo settings → Secrets and variables → Actions:
+Push to `main` → GitHub Actions **builda l'immagine Docker (linux/arm64 + linux/amd64)** e la pusherà su `ghcr.io/paraflu/varco-gates`, poi SSH-deploya su Oracle `jlide.duckdns.org`: `git pull` + `docker compose pull` + `up -d`. Secrets da impostare in repo settings → Secrets and variables → Actions:
 - `ORACLE_SSH_KEY` — private key SSH di accesso a `paraflu@jlide.duckdns.org`
 - `ADMIN_PASSWORD` — password admin UI
 - `HA_TOKEN` — long-lived token Home Assistant

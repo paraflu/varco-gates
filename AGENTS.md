@@ -20,8 +20,8 @@ Browser ── HTTPS ── NPM (Oracle) ── 127.0.0.1:3099 ── Docker (no
 - `src/views/GateControl.vue` — public token UI (Apri/Chiudi)
 - `src/views/AdminPanel.vue` — password-protected admin UI
 - `docker-compose.yml` — prod compose (env via .env, volume varco_data)
-- `deploy.sh` — manual git pull + build + deploy helper
-- `.github/workflows/deploy.yml` — CI: push main → SSH su Oracle → git pull + docker compose build (locale/ARM)
+- `deploy.sh` — manual git pull + compose pull + deploy helper
+- `.github/workflows/deploy.yml` — CI: build immagine (arm64+amd64) → push GHCR → SSH su Oracle → git pull + docker compose pull + up
 
 ## Entities HA (verified 2026-09-02)
 - `switch.sonoff_1002658c25_1` = Cancello Andrea (`turn_on` apri, `turn_off` chiudi)
@@ -45,7 +45,7 @@ Browser ── HTTPS ── NPM (Oracle) ── 127.0.0.1:3099 ── Docker (no
 | `HA_TOKEN` | export → container |
 | `HA_BASE_URL` | export → container |
 
-Il workflow fa `git clone/pull` del repo pubblico in `~/varco-gates/` sul server, poi `docker compose up -d --build` (build nativo ARM64, env esportate dalle GitHub secrets — niente .env file sul server). Nessuna dipendenza da GHCR.
+Il workflow **builda l'immagine su GitHub Actions** (multi-arch arm64/amd64) e la pusherà su GHCR; poi su Oracle fa `git pull` + `docker compose pull` + `up -d` (env esportate dalle GitHub secrets — niente .env file sul server). Il package GHCR è pubblico (eredita dal repo public).
 
 ## Operations
 - **Regenerate tokens** → admin UI `/admin`
