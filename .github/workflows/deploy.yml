@@ -8,24 +8,27 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy on Oracle
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: jlide.duckdns.org
-          username: paraflu
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          script: |
-            set -e
-            cd ~
-            if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
-            cd varco-gates
-            git fetch origin
-            git checkout main
-            git pull --ff-only
-            export ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}"
-            export HA_TOKEN="${{ secrets.HA_TOKEN }}"
-            export HA_BASE_URL="${{ secrets.HA_BASE_URL }}"
-            docker compose up -d --build
-            sleep 8
-            curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
+      - name: Deploy on Oracle via SSH
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          HA_TOKEN: ${{ secrets.HA_TOKEN }}
+          HA_BASE_URL: ${{ secrets.HA_BASE_URL }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key paraflu@jlide.duckdns.org "ADMIN_PASSWORD='$ADMIN_PASSWORD' HA_TOKEN='$HA_TOKEN' HA_BASE_URL='$HA_BASE_URL' bash -s" <<'REMOTE'
+          set -e
+          cd ~
+          if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
+          cd varco-gates
+          git fetch origin
+          git checkout main
+          git pull --ff-only
+          docker compose up -d --build
+          sleep 8
+          curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
+          REMOTE
 
