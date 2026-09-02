@@ -5,30 +5,85 @@ on:
     branches: [main]
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (ARM64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/paraflu/varco-gates:latest
+            ghcr.io/paraflu/varco-gates:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy on Oracle via SSH
+      - name: Deploy on Oracle
         env:
           SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           HA_TOKEN: ${{ secrets.HA_TOKEN }}
           HA_BASE_URL: ${{ secrets.HA_BASE_URL }}
         run: |
-          set -e
-          mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key paraflu@jlide.duckdns.org "ADMIN_PASSWORD='$ADMIN_PASSWORD' HA_TOKEN='$HA_TOKEN' HA_BASE_URL='$HA_BASE_URL' bash -s" <<'REMOTE'
-          set -e
-          cd ~
-          if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
-          cd varco-gates
-          git fetch origin
-          git checkout main
-          git pull --ff-only
-          docker compose up -d --build
-          sleep 8
-          curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
-          REMOTE
+          set -euo pipefail
 
+          # Chiave SSH in file temporaneo
+          KEY_FILE=$(mktemp)
+          chmod 600 "$KEY_FILE"
+          printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
+          trap 'rm -f "$KEY_FILE"' EXIT
+
+          # .env temporaneo da copiare su Oracle
+          ENV_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE" "$ENV_FILE"' EXIT
+
+          cat > "$ENV_FILE" <<EOF
+          ADMIN_PASSWORD=$ADMIN_PASSWORD
+          HA_TOKEN=$HA_TOKEN
+          HA_BASE_URL=$HA_BASE_URL
+          EOF
+
+          scp -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=20 \
+              -i "$KEY_FILE" \
+              "$ENV_FILE" \
+              paraflu@jlide.duckdns.org:~/varco-gates/.env
+
+          ssh -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=20 \
+              -i "$KEY_FILE" \
+              paraflu@jlide.duckdns.org \
+              'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd ~/varco-gates
+          docker compose pull
+          docker compose up -d --remove-orphans
+          sleep 5
+          curl -s -o /dev/null -w "http_code=%{http_code}\n" http://localhost:3099/ || true
+          REMOTE

@@ -1,7 +1,6 @@
 services:
   varco-gates:
-    build: .
-    image: varco-gates:latest
+    image: ghcr.io/paraflu/varco-gates:latest
     container_name: varco-gates
     restart: unless-stopped
     ports:
@@ -16,7 +15,7 @@ services:
     volumes:
       - varco_data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
