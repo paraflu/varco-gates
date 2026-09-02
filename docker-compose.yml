@@ -1,0 +1,25 @@
+services:
+  varco-gates:
+    image: ghcr.io/paraflu/varco-gates:${TAG:-latest}
+    container_name: varco-gates
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3099:3000"
+    environment:
+      - PORT=3000
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - HA_BASE_URL=${HA_BASE_URL}
+      - HA_TOKEN=${HA_TOKEN}
+      - GATE_ANDREA_ENTITY=${GATE_ANDREA_ENTITY:-switch.sonoff_1002658c25_1}
+      - GATE_ALESSANDRO_ENTITY=${GATE_ALESSANDRO_ENTITY:-switch.sonoff_1002592ef9_1}
+    volumes:
+      - varco_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  varco_data:
