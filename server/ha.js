@@ -30,6 +30,21 @@ export async function haCallService(entityId, service) {
   return true
 }
 
+export async function getGateState(entityId) {
+  const res = await fetch(`${HA_BASE_URL}/api/states/${entityId}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${HA_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`HA get state failed: ${res.status} ${text}`)
+  }
+  return res.json()
+}
+
 export function gateById(id) {
   return GATES.find(g => g.id === id)
 }

@@ -20,20 +20,19 @@
       <div v-for="g in gates" :key="g.id" class="bg-white rounded-lg shadow-md p-4 mb-4">
         <div class="flex justify-between items-center">
           <h5 class="text-lg font-medium mb-0">{{ g.label }}</h5>
-          <div>
+          <div class="flex items-center space-x-3">
+            <span class="text-sm">{{ g.state === 'on' ? 'Aperto' : 'Chiuso' }}</span>
             <button 
-              class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded me-2"
-              :disabled="busy"
-              @click="control(g.id, 'open')"
+              class="px-4 py-2 rounded-md font-medium transition-all duration-200"
+              :class="[
+                g.state === 'on' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white',
+                busy && g.id === currentActionGate ? 'opacity-50' : ''
+              ]"
+              :disabled="busy && g.id === currentActionGate"
+              @click="toggleGate(g.id)"
+              @mousedown="vibrate()"
             >
-              Apri
-            </button>
-            <button 
-              class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded"
-              :disabled="busy"
-              @click="control(g.id, 'close')"
-            >
-              Chiudi
+              {{ g.state === 'on' ? 'Chiudi' : 'Apri' }}
             </button>
           </div>
         </div>
@@ -60,16 +59,44 @@ const loading = ref(true)
 const error = ref('')
 const gates = ref([])
 const busy = ref(false)
+const currentActionGate = ref(null)
 const msg = ref('')
 const msgOk = ref(true)
 const token = route.params.token || ''
 
+const vibrate = () => {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(50)
+  }
+}
+
 onMounted(async () => {
   try {
-    const r = await fetch('/api/verify/' + token)
-    if (!r.ok) { error.value = await r.text(); return }
-    const data = await r.json()
-    gates.value = data.gates
+    // Verify token and get gates
+    const verifyRes = await fetch('/api/verify/' + token)
+    if (!verifyRes.ok) { 
+      error.value = await verifyRes.text(); 
+      return 
+    }
+    const verifyData = await verifyRes.json()
+    gates.value = verifyData.gates.map(gate => ({
+      ...gate,
+      state: 'unknown' // Will be updated below
+    }))
+    
+    // Fetch states for each gate
+    for (const gate of gates.value) {
+      try {
+        const stateRes = await fetch('/api/gate-state/' + gate.id)
+        if (stateRes.ok) {
+          const stateData = await stateRes.json()
+          gate.state = stateData.state
+        }
+      } catch (e) {
+        console.error('Failed to get state for gate', gate.id, e)
+        gate.state = 'unknown'
+      }
+    }
   } catch (e) {
     error.value = 'Errore di connessione'
   } finally {
@@ -77,26 +104,61 @@ onMounted(async () => {
   }
 })
 
-async function control(gateId, action) {
+async function toggleGate(gateId) {
+  // Prevent multiple rapid clicks
+  if (busy.value && currentActionGate.value === gateId) return
+  
   busy.value = true
+  currentActionGate.value = gateId
+  
   try {
-    const r = await fetch('/api/control/' + gateId, {
+    // Get current gate to determine action
+    const gate = gates.value.find(g => g.id === gateId)
+    if (!gate) throw new Error('Gate not found')
+    
+    const action = gate.state === 'on' ? 'close' : 'open'
+    
+    const res = await fetch('/api/control/' + gateId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action })
     })
-    if (!r.ok) {
-      msg.value = await r.text()
+    
+    if (!res.ok) {
+      msg.value = await res.text()
       msgOk.value = false
       return
     }
+    
+    // Update optimistic UI
+    gate.state = action === 'open' ? 'on' : 'off'
     msg.value = action === 'open' ? 'Anello aperto' : 'Anello chiuso'
     msgOk.value = true
+    
+    // Also update the other gate's state display if needed (though we'll refresh on next action)
+    // For immediate feedback, we could fetch both states again, but let's keep it simple
+    
   } catch (e) {
     msg.value = 'Errore di connessione'
     msgOk.value = false
   } finally {
     busy.value = false
+    currentActionGate.value = null
+    
+    // Refresh state after action to ensure accuracy
+    setTimeout(async () => {
+      try {
+        for (const gate of gates.value) {
+          const stateRes = await fetch('/api/gate-state/' + gate.id)
+          if (stateRes.ok) {
+            const stateData = await stateRes.json()
+            gate.state = stateData.state
+          }
+        }
+      } catch (e) {
+        console.error('Failed to refresh states', e)
+      }
+    }, 1000)
   }
 }
 </script>

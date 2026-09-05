@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { createToken, listTokens, revokeToken, getValidToken } from './db.js'
-import { GATES, haCallService, gateById } from './ha.js'
+import { GATES, haCallService, gateById, getGateState } from './ha.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -58,6 +58,19 @@ app.post('/api/control', async (req, res) => {
   }
 })
 
+// New endpoint to get gate state
+app.get('/api/gate-state/:gateId', async (req, res) => {
+  const gate = gateById(req.params.gateId)
+  if (!gate) return res.status(400).json({ error: 'gate sconosciuto' })
+  try {
+    const stateObj = await getGateState(gate.entityId)
+    // Home Assistant returns state as string: 'on' or 'off' for switch
+    res.json({ state: stateObj.state })
+  } catch (e) {
+    res.status(502).json({ error: e.message })
+  }
+})
+
 const distDir = join(__dirname, '..', 'dist')
 if (existsSync(distDir)) {
   app.use(express.static(distDir))
@@ -65,4 +78,3 @@ if (existsSync(distDir)) {
 }
 
 app.listen(PORT, '0.0.0.0', () => console.log(`varco-gates on :${PORT}`))
-
