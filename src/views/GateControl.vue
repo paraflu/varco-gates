@@ -1,32 +1,52 @@
 <template>
-  <div class="container mt-5" style="max-width: 640px">
-    <div class="text-center mb-4">
-      <h1 class="h3">Controllo Cancelli</h1>
+  <div class="max-w-md mx-auto mt-12">
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-bold">Controllo Cancelli</h1>
     </div>
 
     <template v-if="loading">
       <div class="text-center">
-        <div class="spinner-border" role="status"><span class="visually-hidden">Verifica token...</span></div>
+        <div class="flex h-12 w-12 items-center justify-center border-2 border-t-2 border-gray-200 rounded-full animate-spin">
+          <span class="sr-only">Verifica token...</span>
+        </div>
       </div>
     </template>
 
     <template v-else-if="error">
-      <div class="alert alert-danger">{{ error }}</div>
+      <div class="bg-red-100 text-red-800 px-4 py-2 rounded-md">{{ error }}</div>
     </template>
 
     <template v-else>
-      <div v-for="g in gates" :key="g.id" class="card mb-3">
-        <div class="card-body d-flex justify-content-between align-items-center">
-          <h5 class="card-title mb-0">{{ g.label }}</h5>
+      <div v-for="g in gates" :key="g.id" class="bg-white rounded-lg shadow-md p-4 mb-4">
+        <div class="flex justify-between items-center">
+          <h5 class="text-lg font-medium mb-0">{{ g.label }}</h5>
           <div>
-            <button class="btn btn-success me-2" :disabled="busy"
-              @click="control(g.id, 'open')">Apri</button>
-            <button class="btn btn-danger" :disabled="busy"
-              @click="control(g.id, 'close')">Chiudi</button>
+            <button 
+              class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded me-2"
+              :disabled="busy"
+              @click="control(g.id, 'open')"
+            >
+              Apri
+            </button>
+            <button 
+              class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded"
+              :disabled="busy"
+              @click="control(g.id, 'close')"
+            >
+              Chiudi
+            </button>
           </div>
         </div>
       </div>
-      <div v-if="msg" :class="'alert mt-3 ' + (msgOk ? 'alert-success' : 'alert-danger')">{{ msg }}</div>
+      <div 
+        v-if="msg" 
+        :class="[
+          'mt-4 px-4 py-2 rounded-md',
+          msgOk ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        ]"
+      >
+        {{ msg }}
+      </div>
     </template>
   </div>
 </template>
@@ -57,23 +77,26 @@ onMounted(async () => {
   }
 })
 
-async function control(gate, action) {
+async function control(gateId, action) {
   busy.value = true
-  msg.value = ''
   try {
-    const r = await fetch('/api/control', {
+    const r = await fetch('/api/control/' + gateId, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, gate, action })
+      body: JSON.stringify({ action })
     })
-    const data = await r.json().catch(() => ({}))
-    if (r.ok) { msgOk.value = true; msg.value = 'Comando inviato' }
-    else { msgOk.value = false; msg.value = data.error || 'Errore' }
+    if (!r.ok) {
+      msg.value = await r.text()
+      msgOk.value = false
+      return
+    }
+    msg.value = action === 'open' ? 'Anello aperto' : 'Anello chiuso'
+    msgOk.value = true
   } catch (e) {
-    msgOk.value = false; msg.value = 'Errore di connessione'
+    msg.value = 'Errore di connessione'
+    msgOk.value = false
   } finally {
     busy.value = false
   }
 }
 </script>
-

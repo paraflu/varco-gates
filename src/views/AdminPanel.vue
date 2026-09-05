@@ -1,112 +1,198 @@
 <template>
-  <div class="container mt-5" style="max-width: 760px">
-    <h1 class="h3 mb-4">Admin - Token Cancelli</h1>
+  <div class="max-w-xl mx-auto mt-12">
+    <h1 class="text-2xl font-bold mb-6">Admin - Token Cancelli</h1>
 
-    <div v-if="!authed" class="card">
-      <div class="card-body">
-        <h5 class="card-title">Login</h5>
-        <div class="input-group">
-          <input type="password" class="form-control" v-model="password"
-            placeholder="Password amministratore" @keyup.enter="login" />
-          <button class="btn btn-primary" @click="login">Accedi</button>
-        </div>
+    <div v-if="!authed" class="bg-white rounded-lg shadow-md p-6">
+      <h5 class="text-lg font-semibold mb-4">Login</h5>
+      <div class="flex mb-4">
+        <input 
+          type="password" 
+          class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          v-model="password"
+          placeholder="Password amministratore"
+          @keyup.enter="login"
+        />
+        <button 
+          class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700 focus:outline-none"
+          @click="login"
+        >
+          Accedi
+        </button>
       </div>
     </div>
 
     <template v-else>
-      <div class="card mb-4">
-        <div class="card-body">
-          <h5 class="card-title">Genera nuovo token</h5>
-          <div class="row g-2">
-            <div class="col-md-4">
-              <input class="form-control" v-model="label" placeholder="Etichetta (es. Consegna)" />
-            </div>
-            <div class="col-md-4">
-              <select class="form-select" v-model="ttl">
-                <option :value="3600">1 ora</option>
-                <option :value="7200">2 ore</option>
-                <option :value="86400">24 ore</option>
-                <option :value="604800">7 giorni</option>
-                <option :value="2592000">30 giorni</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <button class="btn btn-success w-100" :disabled="creating" @click="create">Genera</button>
-            </div>
+      <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h5 class="text-lg font-semibold mb-4">Genera nuovo token</h5>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <input 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              v-model="label"
+              placeholder="Etichetta (es. Consegna)"
+            />
+          </div>
+          <div>
+            <select 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              v-model="ttl"
+            >
+              <option :value="3600">1 ora</option>
+              <option :value="7200">2 ore</option>
+              <option :value="86400">24 ore</option>
+              <option :value="604800">7 giorni</option>
+              <option :value="2592000">30 giorni</option>
+            </select>
+          </div>
+          <div>
+            <button 
+              class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+              :disabled="creating"
+              @click="create"
+            >
+              Genera
+            </button>
           </div>
         </div>
       </div>
 
-      <div v-if="newUrl" class="alert alert-info">
+      <div v-if="newUrl" class="bg-blue-100 text-blue-800 px-4 py-2 rounded-md mb-6">
         <strong>URL di accesso:</strong><br />
-        <input class="form-control mt-1" readonly :value="newUrl" @focus="$event.target.select()" />
+        <input 
+          class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          readonly 
+          :value="newUrl"
+          @focus="$event.target.select()"
+        />
       </div>
 
-      <h5 class="mb-2">Token attivi</h5>
-      <table class="table table-sm table-striped">
-        <thead><tr><th>Etichetta</th><th>Token</th><th>Scadenza</th><th></th></tr></thead>
-        <tbody>
-          <tr v-for="t in tokens" :key="t.id">
-            <td>{{ t.label || '-' }}</td>
-            <td><code class="small">{{ shortToken(t.token) }}</code></td>
-            <td :class="{ 'text-danger': t.expired }">{{ fmt(t.expires_at) }}</td>
-            <td><button class="btn btn-sm btn-outline-danger" @click="revoke(t.id)">Revoca</button></td>
-          </tr>
-        </tbody>
-      </table>
+      <h5 class="text-lg font-semibold mb-4">Token attivi</h5>
+      <div v-if="tokens.length === 0" class="text-center text-gray-500 py-4">
+        Nessun token attivo
+      </div>
+      <div v-else>
+        <div v-for="t in tokens" :key="t.id" class="bg-white rounded-lg shadow-md p-4 mb-4 flex justify-between items-start">
+          <div>
+            <p class="font-medium">{{ t.label }}</p>
+            <p class="text-sm text-gray-500">{{ t.created_at }}</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button 
+              class="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+              @click="copy(t.url)"
+            >
+              Copia
+            </button>
+            <button 
+              class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+              @click="revoke(t.id)"
+            >
+              Revoca
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const password = ref('')
 const authed = ref(false)
-const label = ref('')
-const ttl = ref(3600)
-const tokens = ref([])
-const newUrl = ref('')
 const creating = ref(false)
+const label = ref('')
+const ttl = ref('86400')
+const newUrl = ref('')
+const tokens = ref([])
 
-function shortToken(t) { return t.slice(0, 12) + '...' }
-function fmt(iso) { return new Date(iso).toLocaleString('it-IT') }
-
-function authHeader() { return { 'Authorization': 'Bearer ' + password.value } }
+const router = useRouter()
 
 async function login() {
-  const r = await fetch('/api/admin/tokens', { headers: authHeader() })
-  if (r.ok) { authed.value = true; await load() }
-  else alert('Password errata')
+  try {
+    const res = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password.value })
+    })
+    if (!res.ok) {
+      alert('Login fallito')
+      return
+    }
+    authed.value = true
+    await loadTokens()
+  } catch (e) {
+    alert('Errore di connessione')
+  }
 }
 
-async function load() {
-  const r = await fetch('/api/admin/tokens', { headers: authHeader() })
-  tokens.value = (await r.json()).tokens
+async function loadTokens() {
+  try {
+    const res = await fetch('/admin/tokens')
+    if (!res.ok) {
+      alert('Impossibile caricare i token')
+      return
+    }
+    const data = await res.json()
+    tokens.value = data.tokens || []
+  } catch (e) {
+    alert('Errore di connessione')
+  }
 }
 
 async function create() {
+  if (!label.value.trim()) {
+    alert('Inserisci un\'etichetta')
+    return
+  }
   creating.value = true
   try {
-    const r = await fetch('/api/admin/tokens', {
+    const res = await fetch('/admin/token', {
       method: 'POST',
-      headers: { ...authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: label.value, ttl_seconds: ttl.value })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label.value, ttl: ttl.value })
     })
-    const data = await r.json()
-    if (r.ok) {
-      newUrl.value = location.origin + '/' + data.token
-      label.value = ''
-      await load()
-    } else alert(data.error || 'Errore')
-  } finally { creating.value = false }
+    if (!res.ok) {
+      alert('Errore nella creazione')
+      return
+    }
+    const data = await res.json()
+    newUrl.value = data.url
+    label.value = ''
+    await loadTokens()
+  } catch (e) {
+    alert('Errore di connessione')
+  } finally {
+    creating.value = false
+  }
+}
+
+async function copy(url) {
+  await navigator.clipboard.writeText(url)
+  alert('URL copiato!')
 }
 
 async function revoke(id) {
-  await fetch('/api/admin/tokens/' + id, { method: 'DELETE', headers: authHeader() })
-  await load()
+  if (!confirm('Revoca questo token?')) return
+  try {
+    const res = await fetch(`/admin/token/${id}`, {
+      method: 'DELETE'
+    })
+    if (!res.ok) {
+      alert('Errore nella revoca')
+      return
+    }
+    await loadTokens()
+  } catch (e) {
+    alert('Errore di connessione')
+  }
 }
 
-onMounted(() => { /* login on demand */ })
+// Load tokens on mount if already authed (e.g., page refresh)
+onMounted(() => {
+  // Check if we have a token in localStorage or something? For now, assume not authed on refresh.
+  // In a real app, you'd check session.
+})
 </script>
-
