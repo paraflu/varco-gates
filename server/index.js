@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { createToken, listTokens, revokeToken, getValidToken } from './db.js'
-import { GATES, haCallService, gateById, getGateState } from './ha.js'
+import { GATES, haCallService, gateById } from './ha.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -46,26 +46,12 @@ app.get('/api/verify/:token', (req, res) => {
 app.post('/api/control', async (req, res) => {
   const body = req.body || {}
   if (!getValidToken(body.token)) return res.status(403).json({ error: 'Token non valido o scaduto' })
-  if (body.action !== 'open' && body.action !== 'close') return res.status(400).json({ error: 'action must be open o close' })
+  if (!body.action) return res.status(400).json({ error: 'action is required' })
   const gate = gateById(body.gate)
   if (!gate) return res.status(400).json({ error: 'gate sconosciuto' })
   try {
-    const svc = body.action === 'open' ? 'turn_on' : 'turn_off'
-    await haCallService(gate.entityId, svc)
+    await haCallService(gate.entityId, body.action)
     res.json({ ok: true, gate: body.gate, action: body.action })
-  } catch (e) {
-    res.status(502).json({ error: e.message })
-  }
-})
-
-// New endpoint to get gate state
-app.get('/api/gate-state/:gateId', async (req, res) => {
-  const gate = gateById(req.params.gateId)
-  if (!gate) return res.status(400).json({ error: 'gate sconosciuto' })
-  try {
-    const stateObj = await getGateState(gate.entityId)
-    // Home Assistant returns state as string: 'on' or 'off' for switch
-    res.json({ state: stateObj.state })
   } catch (e) {
     res.status(502).json({ error: e.message })
   }
