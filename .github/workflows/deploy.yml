@@ -52,9 +52,11 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key \
-            paraflu@jlide.duckdns.org \
-            "export ADMIN_PASSWORD='$ADMIN_PASSWORD' HA_TOKEN='$HA_TOKEN' HA_BASE_URL='$HA_BASE_URL' bash -s" <<'REMOTE'
+            paraflu@jlide.duckdns.org << 'EOF'
             set -e
+            export ADMIN_PASSWORD="$ADMIN_PASSWORD"
+            export HA_TOKEN="$HA_TOKEN"
+            export HA_BASE_URL="$HA_BASE_URL"
             cd ~
             if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
             cd varco-gates
@@ -63,5 +65,4 @@ jobs:
             docker compose up -d
             sleep 8
             curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
-          REMOTE
-
+          EOF
