@@ -107,20 +107,25 @@ const label = ref('')
 const ttl = ref('86400')
 const newUrl = ref('')
 const tokens = ref([])
+let storedPassword = ''
 
 const router = useRouter()
 
+function authHeaders() {
+  return storedPassword ? { Authorization: `Bearer ${storedPassword}` } : {}
+}
+
 async function login() {
   try {
-    const res = await fetch('/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: password.value })
+    const res = await fetch('/api/admin/tokens', {
+      headers: authHeaders()
     })
     if (!res.ok) {
       alert('Login fallito')
       return
     }
+    // If we get here, the password is valid (since requireAdmin passes)
+    storedPassword = password.value
     authed.value = true
     await loadTokens()
   } catch (e) {
@@ -130,7 +135,9 @@ async function login() {
 
 async function loadTokens() {
   try {
-    const res = await fetch('/admin/tokens')
+    const res = await fetch('/api/admin/tokens', {
+      headers: authHeaders()
+    })
     if (!res.ok) {
       alert('Impossibile caricare i token')
       return
@@ -149,10 +156,13 @@ async function create() {
   }
   creating.value = true
   try {
-    const res = await fetch('/admin/token', {
+    const res = await fetch('/api/admin/tokens', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: label.value, ttl: ttl.value })
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ label: label.value, ttlSeconds: ttl.value })
     })
     if (!res.ok) {
       alert('Errore nella creazione')
@@ -177,8 +187,9 @@ async function copy(url) {
 async function revoke(id) {
   if (!confirm('Revoca questo token?')) return
   try {
-    const res = await fetch(`/admin/token/${id}`, {
-      method: 'DELETE'
+    const res = await fetch(`/api/admin/tokens/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
     })
     if (!res.ok) {
       alert('Errore nella revoca')
@@ -192,7 +203,7 @@ async function revoke(id) {
 
 // Load tokens on mount if already authed (e.g., page refresh)
 onMounted(() => {
-  // Check if we have a token in localStorage or something? For now, assume not authed on refresh.
-  // In a real app, you'd check session.
+  // For simplicity, we don't persist authed state across refreshes.
+  // In a real app, you might store the token in localStorage or a cookie.
 })
 </script>
