@@ -6,15 +6,15 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # Oracle e' ARM: runner ARM nativo, niente QEMU (better-sqlite3 crashava
+    # sotto emulazione: "qemu: uncaught target signal 4", hang 6h -> timeout).
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU (arm64 emulation)
-        uses: docker/setup-qemu-action@v3
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -26,11 +26,11 @@ jobs:
           username: paraflu
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push (arm64 + amd64)
+      - name: Build and push (arm64)
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64, linux/amd64
+          platforms: linux/arm64
           push: true
           tags: |
             ghcr.io/paraflu/varco-gates:latest
@@ -39,6 +39,7 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Pull + restart on Oracle via SSH
         env:
@@ -51,18 +52,27 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key \
-            paraflu@jlide.duckdns.org << 'EOF'
-            set -e
-            export ADMIN_PASSWORD="$ADMIN_PASSWORD"
-            export HA_TOKEN="$HA_TOKEN"
-            export HA_BASE_URL="$HA_BASE_URL"
-            cd ~
-            if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
-            cd varco-gates
-            git fetch origin && git checkout main && git pull --ff-only
-            docker compose pull
-            docker compose up -d
-            sleep 8
-            curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
+          SSH_OPTS="-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key"
+          # Secrets in base64: attraversano l'heredoc SSH con qualsiasi carattere speciale.
+          B64_ADMIN=$(printf '%s' "$ADMIN_PASSWORD" | base64 -w0)
+          B64_TOKEN=$(printf '%s' "$HA_TOKEN" | base64 -w0)
+          B64_URL=$(printf '%s' "$HA_BASE_URL" | base64 -w0)
+          # Heredoc volutamente NON quotato: $B64_* espandono in locale,
+          # \$(...) resta letterale e gira sul bash remoto (bypassa la login shell zsh
+          # di Oracle, dove "export ... bash -s" moriva con "not valid in this context: -s").
+          # shellcheck disable=SC2086
+          ssh $SSH_OPTS paraflu@jlide.duckdns.org bash -s <<EOF
+          set -e
+          export ADMIN_PASSWORD="\$(printf '%s' '$B64_ADMIN' | base64 -d)"
+          export HA_TOKEN="\$(printf '%s' '$B64_TOKEN' | base64 -d)"
+          export HA_BASE_URL="\$(printf '%s' '$B64_URL' | base64 -d)"
+          cd ~
+          if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
+          cd varco-gates
+          git fetch origin && git checkout main && git pull --ff-only
+          docker compose pull
+          docker compose up -d
+          sleep 8
+          curl -s -o /dev/null -w "local http_code=%{http_code}\n" http://localhost:3099/ || true
           EOF
+          rm -f ~/.ssh/deploy_key
