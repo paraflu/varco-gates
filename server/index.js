@@ -11,9 +11,13 @@ import { sendAlert } from './notify.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+app.disable('x-powered-by')
 const PORT = Number(process.env.PORT) || 3000
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 const COOKIE_SECRET = process.env.COOKIE_SECRET || ADMIN_PASSWORD
+if (!process.env.COOKIE_SECRET) {
+  console.warn('[WARN] COOKIE_SECRET non impostato: uso ADMIN_PASSWORD come segreto cookie. Impostalo in .env (openssl rand -hex 32).')
+}
 const isProd = process.env.NODE_ENV === 'production'
 
 // Express: fidati di X-Forwarded-For dal proxy (NPM) per l'IP corretto
@@ -33,7 +37,10 @@ app.use((req, _res, next) => {
 })
 
 // --- Sessione admin via cookie firmato HMAC ---
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+
+// Rate limiting login: IP -> array di timestamp dei fallimenti (in-memory, resettato a riavvio)
+const loginAttempts = new Map()
 
 function signSession(expiresAt) {
   const nonce = randomBytes(16).toString('hex')
@@ -96,12 +103,24 @@ function tokenPrefix(t) {
 
 app.post('/api/admin/login', (req, res) => {
   const ip = clientIp(req)
+  // Rate limit in-memory per IP: 10 tentativi / 15 minuti
+  const now = Date.now()
+  const attempts = (loginAttempts.get(ip) || []).filter(ts => now - ts < 15 * 60_000)
+  if (attempts.length >= 10) {
+    writeAudit({ kind: 'admin_login_fail', actor: '', ip, result: 'fail', detail: 'rate limited' })
+    return res.status(429).json({ error: 'Troppi tentativi, riprova più tardi' })
+  }
   const { password } = req.body || {}
   if (typeof password !== 'string' || password.length === 0 || password.length > 256) {
     writeAudit({ kind: 'admin_login_fail', actor: '', ip, result: 'fail', detail: 'empty or oversized password' })
     return res.status(400).json({ error: 'password required' })
   }
-  if (password !== ADMIN_PASSWORD) {
+  // Confronto costante-tempo: evita timing attack sulla password admin
+  const pwBuf = createHash('sha256').update(password).digest()
+  const refBuf = createHash('sha256').update(ADMIN_PASSWORD).digest()
+  if (!timingSafeEqual(pwBuf, refBuf)) {
+    attempts.push(now)
+    loginAttempts.set(ip, attempts)
     writeAudit({ kind: 'admin_login_fail', actor: '', ip, result: 'fail', detail: 'wrong password' })
     // Rate limit alert: >= 5 fail in 5 minuti
     const fails = countAuditSince('admin_login_fail', 5)
@@ -228,6 +247,15 @@ app.post('/api/control', async (req, res) => {
     })
     return res.status(400).json({ error: 'action is required' })
   }
+  // Whitelist azioni: previene path traversal verso endpoint arbitrari dell'API HA
+  const ALLOWED_ACTIONS = new Set(['toggle', 'turn_on', 'turn_off'])
+  if (!ALLOWED_ACTIONS.has(body.action)) {
+    writeAudit({
+      kind: 'gate_control_fail', actor: tokenPrefix(t), ip,
+      result: 'fail', detail: `action non permessa: ${String(body.action).slice(0, 32)}`
+    })
+    return res.status(400).json({ error: 'action non permessa' })
+  }
   const gate = gateById(body.gate)
   if (!gate) {
     writeAudit({
@@ -248,7 +276,7 @@ app.post('/api/control', async (req, res) => {
       kind: 'gate_control_fail', actor: tokenPrefix(t), ip,
       result: 'fail', detail: `gate=${body.gate} action=${body.action} err="${String(e.message).slice(0, 120)}"`
     })
-    res.status(502).json({ error: e.message })
+    res.status(502).json({ error: 'Errore comunicazione con il cancello, riprova' })
   }
 })
 

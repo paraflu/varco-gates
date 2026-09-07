@@ -8,6 +8,9 @@ services:
     environment:
       - PORT=3000
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Segreto HMAC dedicato per i cookie di sessione (64 hex random).
+      # Genera con: openssl rand -hex 32
+      - COOKIE_SECRET=${COOKIE_SECRET}
       - HA_BASE_URL=${HA_BASE_URL}
       - HA_TOKEN=${HA_TOKEN}
       - GATE_ANDREA_ENTITY=${GATE_ANDREA_ENTITY:-switch.sonoff_1002658c25_1}

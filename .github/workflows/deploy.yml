@@ -36,8 +36,19 @@ jobs:
             ghcr.io/paraflu/varco-gates:latest
             ghcr.io/paraflu/varco-gates:${{ github.sha }}
 
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+      - run: npm test
+
   deploy:
-    needs: build-and-push
+    needs: [build-and-push, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -45,6 +56,7 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          COOKIE_SECRET: ${{ secrets.COOKIE_SECRET }}
           HA_TOKEN: ${{ secrets.HA_TOKEN }}
           HA_BASE_URL: ${{ secrets.HA_BASE_URL }}
         run: |
@@ -55,6 +67,7 @@ jobs:
           SSH_OPTS="-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i ~/.ssh/deploy_key"
           # Secrets in base64: attraversano l'heredoc SSH con qualsiasi carattere speciale.
           B64_ADMIN=$(printf '%s' "$ADMIN_PASSWORD" | base64 -w0)
+          B64_COOKIE=$(printf '%s' "$COOKIE_SECRET" | base64 -w0)
           B64_TOKEN=$(printf '%s' "$HA_TOKEN" | base64 -w0)
           B64_URL=$(printf '%s' "$HA_BASE_URL" | base64 -w0)
           # Heredoc volutamente NON quotato: $B64_* espandono in locale,
@@ -74,6 +87,7 @@ jobs:
           # envsubst è opzionale (compose lo fa nativamente); qui passiamo
           # i secrets come env del comando, .env è solo fallback locale.
           export ADMIN_PASSWORD="\$(printf '%s' '$B64_ADMIN' | base64 -d)"
+          export COOKIE_SECRET="\$(printf '%s' '$B64_COOKIE' | base64 -d)"
           export HA_TOKEN="\$(printf '%s' '$B64_TOKEN' | base64 -d)"
           export HA_BASE_URL="\$(printf '%s' '$B64_URL' | base64 -d)"
           docker compose pull

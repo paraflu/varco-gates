@@ -12,6 +12,10 @@ if [ -z "${HA_TOKEN:-}" ]; then
     echo "Error: HA_TOKEN environment variable is required"
     exit 1
 fi
+if [ -z "${COOKIE_SECRET:-}" ]; then
+    echo "Error: COOKIE_SECRET environment variable is required (openssl rand -hex 32)"
+    exit 1
+fi
 
 HOST="paraflu@jlide.duckdns.org"
 HA_BASE_URL="${HA_BASE_URL:-http://192.168.3.27:8123}"
@@ -20,6 +24,7 @@ echo ">> Pull + restart on $HOST"
 ssh "$HOST" << EOF
 set -e
 export ADMIN_PASSWORD="$ADMIN_PASSWORD"
+export COOKIE_SECRET="$COOKIE_SECRET"
 export HA_TOKEN="$HA_TOKEN"
 export HA_BASE_URL="$HA_BASE_URL"
 if [ -d ~/varco-gates ] && [ -d ~/varco-gates/.git ]; then
