@@ -41,8 +41,9 @@ before(async () => {
       throw new Error(`server morto (exit=${proc.exitCode}, signal=${proc.signalCode}). Log:\n` + serverLog.slice(0, 2000))
     }
     try {
-      const r = await fetch(BASE + '/')
-      if (r.ok) return
+      const r = await fetch(BASE + '/api/verify/ping')
+      // 403 = server vivo (token invalido), è la risposta attesa
+      if (r.status === 403 || r.ok) return
       lastErr = `HTTP ${r.status}`
     } catch (e) {
       lastErr = e.cause?.code || e.message
