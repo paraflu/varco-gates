@@ -36,13 +36,16 @@ before(async () => {
   proc.on('exit', code => { serverLog += `\n[server exited code=${code}]` })
   // attende readiness (max 10s)
   for (let i = 0; i < 100; i++) {
+    if (proc.exitCode !== null || proc.signalCode) {
+      throw new Error(`server morto (exit=${proc.exitCode}, signal=${proc.signalCode}). Log:\n` + serverLog.slice(0, 2000))
+    }
     try {
       const r = await fetch(BASE + '/')
       if (r.ok) return
     } catch { /* not ready */ }
     await new Promise(r => setTimeout(r, 100))
   }
-  throw new Error('server non pronto. Log:\n' + serverLog.slice(0, 2000))
+  throw new Error(`server non pronto (exit=${proc.exitCode}). Log:\n` + serverLog.slice(0, 2000))
 })
 
 after(() => {
