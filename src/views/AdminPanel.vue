@@ -114,15 +114,24 @@ const router = useRouter()
 
 async function login() {
   try {
-    const res = await fetch('/admin/login', {
+    // Crea un token passando la password admin come Bearer
+    // (requireAdmin la confronta con ADMIN_PASSWORD lato server)
+    const res = await fetch('/api/admin/tokens', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: password.value })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + password.value
+      },
+      // ttl_seconds obbligatorio: usiamo 1 anno per la "sessione" di login
+      body: JSON.stringify({ ttl_seconds: 31536000, label: 'admin-session' })
     })
     if (!res.ok) {
       alert('Login fallito')
       return
     }
+    const data = await res.json()
+    // Salva il token per le successive richieste
+    localStorage.setItem('admin_token', data.token)
     authed.value = true
     await loadTokens()
   } catch (e) {
@@ -132,7 +141,9 @@ async function login() {
 
 async function loadTokens() {
   try {
-    const res = await fetch('/admin/tokens')
+    const res = await fetch('/api/admin/tokens', {
+      headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '') }
+    })
     if (!res.ok) {
       alert('Impossibile caricare i token')
       return
@@ -151,10 +162,13 @@ async function create() {
   }
   creating.value = true
   try {
-    const res = await fetch('/admin/token', {
+    const res = await fetch('/api/admin/tokens', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: label.value, ttl: ttl.value })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '')
+      },
+      body: JSON.stringify({ label: label.value, ttl_seconds: Number(ttl.value) || 86400 })
     })
     if (!res.ok) {
       alert('Errore nella creazione')
@@ -179,8 +193,9 @@ async function copy(url) {
 async function revoke(id) {
   if (!confirm('Revoca questo token?')) return
   try {
-    const res = await fetch(`/admin/token/${id}`, {
-      method: 'DELETE'
+    const res = await fetch(`/api/admin/tokens/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '') }
     })
     if (!res.ok) {
       alert('Errore nella revoca')
