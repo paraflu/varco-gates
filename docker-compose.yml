@@ -22,7 +22,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - default
+      - nginx_shared_net
 
 volumes:
   varco_data:
 
+# Colleghiamo varco-gates alla rete di nginx-proxy-manager
+# (container "nginx_manager-app-1") cosi' il proxy host 25.conf
+# che punta a "varco-gates:3000" lo risolve correttamente via DNS.
+networks:
+  default:
+  nginx_shared_net:
+    external: true
+    name: nginx_shared_net
