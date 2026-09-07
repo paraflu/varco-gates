@@ -2,8 +2,12 @@ import express from 'express'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
-import { createToken, listTokens, revokeToken, getValidToken } from './db.js'
+import {
+  createToken, listTokens, revokeToken, getValidToken,
+  writeAudit, listAudit, countAuditSince
+} from './db.js'
 import { GATES, haCallService, gateById } from './ha.js'
+import { sendAlert } from './notify.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -12,11 +16,23 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 const COOKIE_SECRET = process.env.COOKIE_SECRET || ADMIN_PASSWORD
 const isProd = process.env.NODE_ENV === 'production'
 
+// Express: fidati di X-Forwarded-For dal proxy (NPM) per l'IP corretto
+app.set('trust proxy', 1)
 app.use(express.json())
 
-// --- Cookie session admin: firma HMAC sul valore (timestamp + nonce) ---
-// No token salvati lato Express: solo il flag "loggato" con scadenza.
-// Il nonce e' random per evitare fixation, il timestamp firmato per scadenza.
+app.use((req, _res, next) => {
+  const header = req.headers.cookie || ''
+  const out = {}
+  for (const part of header.split(';')) {
+    const [k, ...rest] = part.trim().split('=')
+    if (!k) continue
+    out[k] = decodeURIComponent(rest.join('='))
+  }
+  req.cookies = out
+  next()
+})
+
+// --- Sessione admin via cookie firmato HMAC ---
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 function signSession(expiresAt) {
@@ -43,33 +59,26 @@ function verifySession(value) {
   return { expiresAt: Number(expiresAt) }
 }
 
+function clientIp(req) {
+  return (req.ip || req.connection?.remoteAddress || '').replace(/^::ffff:/, '')
+}
+
 function requireAdmin(req, res, next) {
   if (!ADMIN_PASSWORD) return res.status(500).json({ error: 'ADMIN_PASSWORD not set' })
   const cookie = req.cookies?.vg_session
   const session = verifySession(cookie)
-  if (!session) return res.status(401).json({ error: 'Unauthorized' })
+  if (!session) {
+    writeAudit({ kind: 'admin_unauthorized', actor: '', ip: clientIp(req), result: 'fail', detail: req.method + ' ' + req.path })
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
   next()
 }
 
-// --- Cookie parser minimale (Express non lo abilita di default) ---
-app.use((req, _res, next) => {
-  const header = req.headers.cookie || ''
-  const out = {}
-  for (const part of header.split(';')) {
-    const [k, ...rest] = part.trim().split('=')
-    if (!k) continue
-    out[k] = decodeURIComponent(rest.join('='))
-  }
-  req.cookies = out
-  next()
-})
-
-// --- CSRF: richiede header custom su tutte le POST/DELETE/PUT/PATCH ---
-// Same-origin non lo richiederebbe, ma e' una difesa in profondita' economica.
 function requireCsrf(req, res, next) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next()
   const sent = req.headers['x-requested-with']
   if (sent !== 'XMLHttpRequest') {
+    writeAudit({ kind: 'csrf_block', actor: '', ip: clientIp(req), result: 'fail', detail: req.method + ' ' + req.path })
     return res.status(403).json({ error: 'Missing X-Requested-With header' })
   }
   next()
@@ -77,18 +86,34 @@ function requireCsrf(req, res, next) {
 
 app.use(requireCsrf)
 
-// --- Auth admin (login / logout) ---
+// --- Helper: token prefix da stringa completa ---
+function tokenPrefix(t) {
+  if (!t || t.length < 10) return ''
+  return t.slice(0, 6) + '…' + t.slice(-4)
+}
+
+// --- Auth admin ---
 
 app.post('/api/admin/login', (req, res) => {
+  const ip = clientIp(req)
   const { password } = req.body || {}
   if (typeof password !== 'string' || password.length === 0 || password.length > 256) {
+    writeAudit({ kind: 'admin_login_fail', actor: '', ip, result: 'fail', detail: 'empty or oversized password' })
     return res.status(400).json({ error: 'password required' })
   }
   if (password !== ADMIN_PASSWORD) {
-    // risposta costante nel tempo per evitare timing oracle
+    writeAudit({ kind: 'admin_login_fail', actor: '', ip, result: 'fail', detail: 'wrong password' })
+    // Rate limit alert: >= 5 fail in 5 minuti
+    const fails = countAuditSince('admin_login_fail', 5)
+    if (fails >= 5 && fails % 5 === 0) {
+      sendAlert({
+        subject: `[varco-gates] ${fails} login admin falliti in 5 min da ${ip}`,
+        text: `IP: ${ip}\nTimestamp: ${new Date().toISOString()}\nTotale fallimenti recenti: ${fails}`
+      })
+    }
     return setTimeout(() => res.status(401).json({ error: 'Invalid credentials' }), 200)
   }
-  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 8 // 8 ore
+  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 8
   const cookie = signSession(expiresAt)
   res.cookie('vg_session', cookie, {
     httpOnly: true,
@@ -97,60 +122,112 @@ app.post('/api/admin/login', (req, res) => {
     path: '/',
     maxAge: 8 * 60 * 60 * 1000
   })
+  writeAudit({ kind: 'admin_login_ok', actor: 'admin', ip, result: 'ok', detail: 'sessione 8h' })
   res.json({ ok: true, expiresAt })
 })
 
-app.post('/api/admin/logout', (_req, res) => {
+app.post('/api/admin/logout', (req, res) => {
+  const ip = clientIp(req)
+  writeAudit({ kind: 'admin_logout', actor: 'admin', ip, result: 'ok' })
   res.clearCookie('vg_session', { path: '/' })
   res.json({ ok: true })
 })
 
-// --- Token guest (per link condivisi col vicino) ---
-// Rimane invariato: il token e' random, non riusabile come sessione admin.
+// --- Token guest admin ---
 
 app.post('/api/admin/tokens', requireAdmin, (req, res) => {
+  const ip = clientIp(req)
   const body = req.body || {}
   const ttl = Number(body.ttl_seconds)
   if (!Number.isFinite(ttl)) return res.status(400).json({ error: 'ttl_seconds must be a number' })
   if (ttl < 60 || ttl > 31536000) return res.status(400).json({ error: 'ttl_seconds must be 60..31536000' })
-  const t = createToken({ label: String(body.label || '').slice(0, 64), ttlSeconds: ttl })
+  const label = String(body.label || '').slice(0, 64)
+  const t = createToken({ label, ttlSeconds: ttl })
+  writeAudit({ kind: 'token_create', actor: 'admin', ip, result: 'ok', detail: `label="${label}" ttl=${ttl}s id=${t.token.slice(0, 8)}…` })
   res.json(t)
 })
 
 app.get('/api/admin/tokens', requireAdmin, (_req, res) => {
-  // Escludo il campo token dalla lista (non serve al client, evita leak via XSS)
   const rows = listTokens().map(({ token, ...rest }) => ({
     ...rest,
-    token_prefix: token.slice(0, 6) + '…' + token.slice(-4)
+    token_prefix: tokenPrefix(token)
   }))
   res.json({ tokens: rows })
 })
 
 app.delete('/api/admin/tokens/:id', requireAdmin, (req, res) => {
-  revokeToken(Number(req.params.id))
+  const id = Number(req.params.id)
+  const ip = clientIp(req)
+  revokeToken(id)
+  writeAudit({ kind: 'token_revoke', actor: 'admin', ip, result: 'ok', detail: `id=${id}` })
   res.json({ ok: true })
 })
 
+// --- Audit endpoint (solo admin) ---
+
+app.get('/api/admin/audit', requireAdmin, (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 100, 500)
+  const kind = typeof req.query.kind === 'string' ? req.query.kind : ''
+  const sinceMinutes = Number(req.query.since_minutes) || 0
+  const rows = listAudit({ limit, kind, sinceMinutes })
+  res.json({ events: rows })
+})
+
 // --- Guest: link condiviso ---
-// /api/verify/:token: il guest conosce il token (lo ha nel link). Resta in URL
-// perche' e' l'unico modo per un link statico; ma il client non deve loggarlo.
-// /api/control: il guest manda il token nel body.
 
 app.get('/api/verify/:token', (req, res) => {
-  if (!getValidToken(req.params.token)) return res.status(403).json({ error: 'Token non valido o scaduto' })
+  const ip = clientIp(req)
+  const t = req.params.token
+  const valid = !!getValidToken(t)
+  writeAudit({
+    kind: valid ? 'gate_verify_ok' : 'gate_verify_fail',
+    actor: tokenPrefix(t),
+    ip,
+    result: valid ? 'ok' : 'fail'
+  })
+  if (!valid) return res.status(403).json({ error: 'Token non valido o scaduto' })
   res.json({ valid: true, gates: GATES.map(g => ({ id: g.id, label: g.label })) })
 })
 
 app.post('/api/control', async (req, res) => {
+  const ip = clientIp(req)
   const body = req.body || {}
-  if (!getValidToken(body.token)) return res.status(403).json({ error: 'Token non valido o scaduto' })
-  if (!body.action) return res.status(400).json({ error: 'action is required' })
+  const t = body.token
+  const tokenRow = t ? getValidToken(t) : null
+  if (!tokenRow) {
+    writeAudit({
+      kind: 'gate_control_fail', actor: tokenPrefix(t || ''), ip,
+      result: 'fail', detail: 'token non valido'
+    })
+    return res.status(403).json({ error: 'Token non valido o scaduto' })
+  }
+  if (!body.action) {
+    writeAudit({
+      kind: 'gate_control_fail', actor: tokenPrefix(t), ip,
+      result: 'fail', detail: 'action mancante'
+    })
+    return res.status(400).json({ error: 'action is required' })
+  }
   const gate = gateById(body.gate)
-  if (!gate) return res.status(400).json({ error: 'gate sconosciuto' })
+  if (!gate) {
+    writeAudit({
+      kind: 'gate_control_fail', actor: tokenPrefix(t), ip,
+      result: 'fail', detail: `gate sconosciuto: ${String(body.gate).slice(0, 32)}`
+    })
+    return res.status(400).json({ error: 'gate sconosciuto' })
+  }
   try {
     await haCallService(gate.entityId, body.action)
+    writeAudit({
+      kind: 'gate_control_ok', actor: tokenPrefix(t), ip,
+      result: 'ok', detail: `gate=${body.gate} action=${body.action} label="${tokenRow.label}"`
+    })
     res.json({ ok: true, gate: body.gate, action: body.action })
   } catch (e) {
+    writeAudit({
+      kind: 'gate_control_fail', actor: tokenPrefix(t), ip,
+      result: 'fail', detail: `gate=${body.gate} action=${body.action} err="${String(e.message).slice(0, 120)}"`
+    })
     res.status(502).json({ error: e.message })
   }
 })

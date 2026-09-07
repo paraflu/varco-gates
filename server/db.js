@@ -22,6 +22,20 @@ db.exec(`
   );
 `)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT '',
+    result TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
+  );
+`)
+db.exec('CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts DESC);')
+db.exec('CREATE INDEX IF NOT EXISTS idx_audit_kind ON audit_log(kind, ts DESC);')
+
 export function createToken({ label, ttlSeconds }) {
   const token = randomToken()
   const now = new Date()
@@ -52,4 +66,38 @@ export function getValidToken(token) {
 
 function randomToken() {
   return randomBytes(24).toString('hex')
+}
+
+// --- Audit log ---
+
+export function writeAudit({ kind, actor = '', ip = '', result, detail = '' }) {
+  try {
+    db.prepare(
+      'INSERT INTO audit_log (ts, kind, actor, ip, result, detail) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(new Date().toISOString(), kind, actor, ip, result, detail)
+  } catch (e) {
+    console.error('audit write failed', e?.message)
+  }
+}
+
+export function listAudit({ limit = 100, kind = '', sinceMinutes = 0 } = {}) {
+  let q = 'SELECT * FROM audit_log'
+  const where = []
+  const args = []
+  if (kind) { where.push('kind = ?'); args.push(kind) }
+  if (sinceMinutes > 0) {
+    const since = new Date(Date.now() - sinceMinutes * 60_000).toISOString()
+    where.push('ts >= ?'); args.push(since)
+  }
+  if (where.length) q += ' WHERE ' + where.join(' AND ')
+  q += ' ORDER BY ts DESC LIMIT ?'
+  args.push(limit)
+  return db.prepare(q).all(...args)
+}
+
+export function countAuditSince(kind, sinceMinutes) {
+  const since = new Date(Date.now() - sinceMinutes * 60_000).toISOString()
+  return db.prepare(
+    'SELECT COUNT(*) AS c FROM audit_log WHERE kind = ? AND ts >= ?'
+  ).get(kind, since).c
 }

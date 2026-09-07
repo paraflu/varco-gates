@@ -154,6 +154,7 @@
                   · {{ formatDate(t.created_at) }}
                   <span v-if="t.revoked" class="text-rose-400">· revocato</span>
                   <span v-else-if="t.expired" class="text-amber-400">· scaduto</span>
+                  <span v-else class="text-slate-400">· valido fino a {{ formatDate(t.expires_at) }}</span>
                 </p>
               </div>
               <button
@@ -171,6 +172,56 @@
         <p class="text-center text-xs text-slate-600 mt-8">
           Sessione valida per 8 ore. Esci quando hai finito.
         </p>
+
+        <!-- Audit log -->
+        <div class="bg-slate-900/50 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 mt-6 shadow-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-medium text-white">Audit</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Ultimi 100 eventi</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select
+                v-model="auditFilter"
+                @change="loadAudit"
+                class="px-2 py-1 text-xs bg-slate-950/60 border border-slate-700 rounded text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                <option value="">tutti</option>
+                <option value="admin_login_ok">login ok</option>
+                <option value="admin_login_fail">login fail</option>
+                <option value="admin_logout">logout</option>
+                <option value="token_create">token creati</option>
+                <option value="token_revoke">token revocati</option>
+                <option value="gate_verify_ok">verify ok</option>
+                <option value="gate_verify_fail">verify fail</option>
+                <option value="gate_control_ok">aperture</option>
+                <option value="gate_control_fail">aperture fail</option>
+                <option value="csrf_block">csrf block</option>
+                <option value="admin_unauthorized">unauthorized</option>
+              </select>
+              <button
+                @click="loadAudit"
+                class="px-2.5 py-1 text-xs text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition"
+              >Ricarica</button>
+            </div>
+          </div>
+
+          <div v-if="audit.length === 0" class="text-center py-6 text-slate-500 text-sm">
+            Nessun evento registrato
+          </div>
+          <ul v-else class="divide-y divide-slate-800 max-h-96 overflow-y-auto">
+            <li v-for="e in audit" :key="e.id" class="py-2 text-xs flex items-start gap-3">
+              <span class="font-mono text-slate-500 flex-shrink-0">{{ formatDateTime(e.ts) }}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0"
+                :class="badgeClass(e.kind)">{{ e.kind }}</span>
+              <span class="text-slate-300 flex-1 min-w-0 truncate">
+                <span v-if="e.detail" class="text-slate-400">{{ e.detail }}</span>
+                <span v-else class="text-slate-600">—</span>
+              </span>
+              <span class="text-slate-500 font-mono flex-shrink-0">{{ e.ip || '-' }}</span>
+            </li>
+          </ul>
+        </div>
       </template>
 
     </div>
@@ -189,6 +240,8 @@ const label = ref('')
 const ttl = ref('86400')
 const newUrl = ref('')
 const tokens = ref([])
+const audit = ref([])
+const auditFilter = ref('')
 
 const ADMIN_FETCH = {
   credentials: 'include',
@@ -219,12 +272,37 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+function formatDateTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
+}
+
+function badgeClass(kind) {
+  if (kind.endsWith('_ok') || kind === 'admin_login_ok') return 'bg-emerald-500/20 text-emerald-300'
+  if (kind.endsWith('_fail') || kind === 'admin_login_fail' || kind === 'csrf_block' || kind === 'admin_unauthorized') return 'bg-rose-500/20 text-rose-300'
+  if (kind === 'token_create' || kind === 'token_revoke' || kind === 'admin_logout') return 'bg-indigo-500/20 text-indigo-300'
+  return 'bg-slate-700 text-slate-300'
+}
+
+async function loadAudit() {
+  try {
+    const params = new URLSearchParams({ limit: '100' })
+    if (auditFilter.value) params.set('kind', auditFilter.value)
+    const res = await fetch('/api/admin/audit?' + params, ADMIN_FETCH)
+    if (!res.ok) return
+    const data = await res.json()
+    audit.value = data.events || []
+  } catch (e) { /* offline */ }
+}
+
 async function checkSession() {
   try {
     const res = await fetch('/api/admin/tokens', ADMIN_FETCH)
     if (res.ok) {
       authed.value = true
       await loadTokens()
+      await loadAudit()
     }
   } catch (e) { /* offline */ }
 }
