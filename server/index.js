@@ -288,4 +288,4 @@ if (existsSync(distDir)) {
   app.get('*', (_req, res) => res.sendFile(join(distDir, 'index.html')))
 }
 
-app.listen(PORT, '0.0.0.0', () => console.log(`varco-gates on :${PORT}`))
+app.listen(PORT, () => console.log(`varco-gates on :${PORT}`))
