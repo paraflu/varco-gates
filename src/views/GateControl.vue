@@ -4,12 +4,22 @@
 
       <!-- Loading -->
       <div v-if="loading" class="text-center text-slate-300">
+        <img
+          src="/app-icon.jpg"
+          alt="Varco Gates"
+          class="w-20 h-20 mx-auto rounded-2xl shadow-lg ring-2 ring-indigo-400/30 object-cover mb-4 opacity-70"
+        />
         <div class="inline-block w-10 h-10 border-2 border-slate-700 border-t-indigo-400 rounded-full animate-spin"></div>
         <p class="mt-4 text-sm">Verifica link in corso…</p>
       </div>
 
       <!-- Errore -->
       <div v-else-if="error" class="bg-slate-900/50 backdrop-blur-xl border border-rose-500/30 rounded-2xl p-8 text-center shadow-2xl">
+        <img
+          src="/app-icon.jpg"
+          alt="Varco Gates"
+          class="w-16 h-16 mx-auto rounded-xl shadow-lg ring-1 ring-rose-400/30 object-cover mb-4 opacity-60"
+        />
         <div class="w-12 h-12 mx-auto rounded-full bg-rose-500/20 flex items-center justify-center mb-4">
           <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -22,6 +32,11 @@
       <!-- Cancelli -->
       <div v-else class="space-y-4">
         <div class="text-center mb-6">
+          <img
+            src="/app-icon.jpg"
+            alt="Varco Gates"
+            class="w-24 h-24 mx-auto rounded-2xl shadow-lg ring-2 ring-indigo-400/30 object-cover mb-4"
+          />
           <h1 class="text-2xl font-semibold text-white">Controllo Cancelli</h1>
           <p class="text-sm text-slate-400 mt-1">Tocca per aprire o chiudere</p>
         </div>
