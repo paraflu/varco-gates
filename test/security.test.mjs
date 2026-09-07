@@ -19,6 +19,7 @@ let adminCookie = ''
 before(async () => {
   dataDir = mkdtempSync(join(tmpdir(), 'vg-test-'))
   proc = spawn(process.execPath, ['server/index.js'], {
+    cwd: process.cwd(),
     env: {
       ...process.env,
       PORT: String(PORT),
@@ -27,17 +28,21 @@ before(async () => {
       HA_BASE_URL: 'http://127.0.0.1:1', // porta irraggiungibile: HA assente
       DATA_DIR: dataDir
     },
-    stdio: 'ignore'
+    stdio: ['ignore', 'pipe', 'pipe']
   })
-  // attende readiness
-  for (let i = 0; i < 50; i++) {
+  let serverLog = ''
+  proc.stderr.on('data', d => { serverLog += d })
+  proc.stdout.on('data', d => { serverLog += d })
+  proc.on('exit', code => { serverLog += `\n[server exited code=${code}]` })
+  // attende readiness (max 10s)
+  for (let i = 0; i < 100; i++) {
     try {
       const r = await fetch(BASE + '/')
       if (r.ok) return
     } catch { /* not ready */ }
     await new Promise(r => setTimeout(r, 100))
   }
-  throw new Error('server non pronto')
+  throw new Error('server non pronto. Log:\n' + serverLog.slice(0, 2000))
 })
 
 after(() => {
