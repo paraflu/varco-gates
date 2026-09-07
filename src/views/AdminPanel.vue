@@ -5,12 +5,11 @@
       <!-- Header -->
       <header class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-indigo-500/20 backdrop-blur flex items-center justify-center ring-1 ring-indigo-400/30">
-            <svg class="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 11c2.21 0 4-1.79 4-4S14.21 3 12 3 8 4.79 8 7s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z"/>
-            </svg>
-          </div>
+          <img
+            src="/app-icon.jpg"
+            alt="Varco Gates"
+            class="w-10 h-10 rounded-xl ring-1 ring-indigo-400/30 object-cover"
+          />
           <div>
             <h1 class="text-xl font-semibold text-white">Varco Gates</h1>
             <p class="text-xs text-slate-400">Pannello amministratore</p>
