@@ -157,14 +157,24 @@
                   <span v-else class="text-slate-400">· valido fino a {{ formatDate(t.expires_at) }}</span>
                 </p>
               </div>
-              <button
-                v-if="!t.revoked && !t.expired"
-                @click="revoke(t)"
-                class="px-2.5 py-1 text-xs text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/50 rounded-lg transition"
-                title="Revoca"
-              >
-                Revoca
-              </button>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  v-if="!t.revoked && !t.expired"
+                  @click="revealAndCopy(t)"
+                  class="px-2.5 py-1 text-xs text-slate-400 hover:text-indigo-300 border border-slate-700 hover:border-indigo-500/50 rounded-lg transition"
+                  title="Copia link completo"
+                >
+                  Copia link
+                </button>
+                <button
+                  v-if="!t.revoked && !t.expired"
+                  @click="revoke(t)"
+                  class="px-2.5 py-1 text-xs text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/50 rounded-lg transition"
+                  title="Revoca"
+                >
+                  Revoca
+                </button>
+              </div>
             </li>
           </ul>
         </div>
@@ -198,6 +208,7 @@
                 <option value="gate_control_fail">aperture fail</option>
                 <option value="csrf_block">csrf block</option>
                 <option value="admin_unauthorized">unauthorized</option>
+                <option value="token_reveal">link copiato</option>
               </select>
               <button
                 @click="loadAudit"
@@ -412,6 +423,21 @@ async function copy(url) {
     })
   } catch (e) {
     await swalDark.fire({ icon: 'error', title: 'Copia fallita', text: 'Seleziona e copia manualmente' })
+  }
+}
+
+async function revealAndCopy(token) {
+  // Recupera il token completo via endpoint dedicato (loggato in audit)
+  try {
+    const res = await fetch(`/api/admin/tokens/${token.id}`, ADMIN_FETCH)
+    if (!res.ok) {
+      await swalDark.fire({ icon: 'error', title: 'Errore', text: 'Impossibile recuperare il link' })
+      return
+    }
+    const data = await res.json()
+    await copy(data.url)
+  } catch (e) {
+    await swalDark.fire({ icon: 'error', title: 'Errore di rete' })
   }
 }
 

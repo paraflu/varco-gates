@@ -64,6 +64,14 @@ export function getValidToken(token) {
   return row
 }
 
+export function getTokenById(id) {
+  if (!Number.isFinite(id)) return null
+  return db.prepare(
+    'SELECT id, token, label, created_at, expires_at, revoked, ' +
+    'CASE WHEN expires_at <= ? THEN 1 ELSE 0 END AS expired FROM tokens WHERE id = ?'
+  ).get(new Date().toISOString(), id) || null
+}
+
 function randomToken() {
   return randomBytes(24).toString('hex')
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 import {
-  createToken, listTokens, revokeToken, getValidToken,
+  createToken, listTokens, revokeToken, getValidToken, getTokenById,
   writeAudit, listAudit, countAuditSince
 } from './db.js'
 import { GATES, haCallService, gateById } from './ha.js'
@@ -153,6 +153,26 @@ app.get('/api/admin/tokens', requireAdmin, (_req, res) => {
     token_prefix: tokenPrefix(token)
   }))
   res.json({ tokens: rows })
+})
+
+app.get('/api/admin/tokens/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id)
+  const ip = clientIp(req)
+  const row = getTokenById(id)
+  if (!row) return res.status(404).json({ error: 'Token non trovato' })
+  writeAudit({
+    kind: 'token_reveal', actor: 'admin', ip, result: 'ok',
+    detail: `id=${id} label="${row.label}"`
+  })
+  res.json({
+    id: row.id,
+    label: row.label,
+    token: row.token,
+    url: `${req.protocol}://${req.get('host')}/gate/${row.token}`,
+    revoked: !!row.revoked,
+    expired: !!row.expired,
+    expires_at: row.expires_at
+  })
 })
 
 app.delete('/api/admin/tokens/:id', requireAdmin, (req, res) => {
