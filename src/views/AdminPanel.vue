@@ -1,6 +1,13 @@
 <template>
   <div class="max-w-xl mx-auto mt-12">
-    <h1 class="text-2xl font-bold mb-6">Admin - Token Cancelli</h1>
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold">Admin - Token Cancelli</h1>
+      <button
+        v-if="authed"
+        @click="logout"
+        class="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded"
+      >Esci</button>
+    </div>
 
     <div v-if="!authed" class="bg-white rounded-lg shadow-md p-6">
       <h5 class="text-lg font-semibold mb-4">Login</h5>
@@ -112,39 +119,62 @@ const tokens = ref([])
 
 const router = useRouter()
 
+// Le fetch admin usano tutte `credentials: include` per spedire il cookie
+// di sessione, e l'header X-Requested-With come CSRF check basilare.
+const ADMIN_FETCH = {
+  credentials: 'include',
+  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+}
+
+async function checkSession() {
+  // All'apertura della pagina, vedo se il cookie e' ancora valido
+  // (chiama un endpoint protetto; 200 => loggato)
+  try {
+    const res = await fetch('/api/admin/tokens', { ...ADMIN_FETCH, headers: { ...ADMIN_FETCH.headers } })
+    if (res.ok) {
+      authed.value = true
+      await loadTokens()
+    }
+  } catch (e) { /* offline o simili: lascio il form di login */ }
+}
+
 async function login() {
   try {
-    // Crea un token passando la password admin come Bearer
-    // (requireAdmin la confronta con ADMIN_PASSWORD lato server)
-    const res = await fetch('/api/admin/tokens', {
+    const res = await fetch('/api/admin/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + password.value
-      },
-      // ttl_seconds obbligatorio: usiamo 1 anno per la "sessione" di login
-      body: JSON.stringify({ ttl_seconds: 31536000, label: 'admin-session' })
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ password: password.value })
     })
     if (!res.ok) {
       alert('Login fallito')
       return
     }
-    const data = await res.json()
-    // Salva il token per le successive richieste
-    localStorage.setItem('admin_token', data.token)
     authed.value = true
+    password.value = ''
     await loadTokens()
   } catch (e) {
     alert('Errore di connessione')
   }
 }
 
+async function logout() {
+  try {
+    await fetch('/api/admin/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+  } catch (e) { /* ignora */ }
+  authed.value = false
+  tokens.value = []
+}
+
 async function loadTokens() {
   try {
-    const res = await fetch('/api/admin/tokens', {
-      headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '') }
-    })
+    const res = await fetch('/api/admin/tokens', ADMIN_FETCH)
     if (!res.ok) {
+      if (res.status === 401) authed.value = false
       alert('Impossibile caricare i token')
       return
     }
@@ -164,9 +194,10 @@ async function create() {
   try {
     const res = await fetch('/api/admin/tokens', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '')
+        'X-Requested-With': 'XMLHttpRequest'
       },
       body: JSON.stringify({ label: label.value, ttl_seconds: Number(ttl.value) || 86400 })
     })
@@ -175,7 +206,8 @@ async function create() {
       return
     }
     const data = await res.json()
-    newUrl.value = data.url
+    // Costruisco l'URL dal token + host corrente
+    newUrl.value = `${window.location.origin}/gate/${data.token}`
     label.value = ''
     await loadTokens()
   } catch (e) {
@@ -195,7 +227,8 @@ async function revoke(id) {
   try {
     const res = await fetch(`/api/admin/tokens/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('admin_token') || '') }
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
     if (!res.ok) {
       alert('Errore nella revoca')
@@ -207,9 +240,8 @@ async function revoke(id) {
   }
 }
 
-// Load tokens on mount if already authed (e.g., page refresh)
+// Al mount: prova a usare una sessione cookie gia' presente
 onMounted(() => {
-  // Check if we have a token in localStorage or something? For now, assume not authed on refresh.
-  // In a real app, you'd check session.
+  checkSession()
 })
 </script>
