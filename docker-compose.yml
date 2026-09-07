@@ -15,7 +15,9 @@ services:
     volumes:
       - varco_data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
+      # usa 127.0.0.1 invece di localhost: nel container /etc/hosts ha solo ::1
+      # per "localhost" (IPv6), e node ascolta su 0.0.0.0:3000 (IPv4) → refus.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
       interval: 30s
       timeout: 5s
       retries: 3
