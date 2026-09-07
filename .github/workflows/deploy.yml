@@ -63,13 +63,19 @@ jobs:
           # shellcheck disable=SC2086
           ssh $SSH_OPTS paraflu@jlide.duckdns.org bash -s <<EOF
           set -e
+          # Aggiorna SOLO docker-compose.yml (sorgente unica = repo),
+          # .env resta locale sul server (mai toccato dal deploy).
+          # Niente git clone: ~/varco-gates non è un repo, contiene solo
+          # docker-compose.yml e .env; l'immagine viene già pushata su
+          # GHCR dal job build-and-push, qui la scarichiamo e basta.
+          curl -fsSL -o ~/varco-gates/docker-compose.yml \
+            https://raw.githubusercontent.com/paraflu/varco-gates/main/docker-compose.yml
+          cd ~/varco-gates
+          # envsubst è opzionale (compose lo fa nativamente); qui passiamo
+          # i secrets come env del comando, .env è solo fallback locale.
           export ADMIN_PASSWORD="\$(printf '%s' '$B64_ADMIN' | base64 -d)"
           export HA_TOKEN="\$(printf '%s' '$B64_TOKEN' | base64 -d)"
           export HA_BASE_URL="\$(printf '%s' '$B64_URL' | base64 -d)"
-          cd ~
-          if [ ! -d varco-gates ]; then git clone https://github.com/paraflu/varco-gates.git; fi
-          cd varco-gates
-          git fetch origin && git checkout main && git pull --ff-only
           docker compose pull
           docker compose up -d
           sleep 8
